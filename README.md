@@ -1,6 +1,6 @@
 # 🤖 AI CSV Translator
 
-> 基于 AI 大模型的 CSV 批量翻译工具 | 支持 24 种语言
+> 基于 AI 大模型的 CSV 批量翻译工具 | 支持 24 种语言 | 特别适合UI翻译工作
 
 ![Version](https://img.shields.io/badge/version-1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -47,7 +47,7 @@ npx serve .
 
 ## 📖 使用方法
 
-1. **上传 CSV** - 点击上传或拖拽文件
+1. **上传 CSV** - 点击上传或拖拽文件，把需要翻译的放在第一列即可，超级简单
 2. **选择语言** - 勾选目标语言
 3. **配置 API** - 填写 API Key（支持 DeepSeek / OpenAI）
 4. **开始翻译** - 点击按钮，等待完成
