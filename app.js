@@ -1,3 +1,112 @@
+// UI 翻译
+const i18n = {
+    zh: {
+        title: 'AI CSV 翻译工具',
+        subtitle: '基于 AI 大模型的 CSV 批量翻译工具',
+        uploadTitle: '上传 CSV 文件',
+        uploadHint: '支持 .csv 格式 (UTF-8 编码)',
+        uploadAreaText: '点击选择文件或拖拽文件到此处',
+        sourceLang: '源语言',
+        sourceLangLabel: '请选择 CSV 第一列的语言:',
+        targetLang: '选择目标语言',
+        selectedCount: '已选择',
+        langCount: '种语言',
+        advanced: '进阶功能',
+        enableLengthControl: '启用字符长度控制',
+        lengthHint: '开启后，翻译结果字符数将控制在源文本长度的一定倍率以内。💡 尤其适合多语言 UI 开发，保持界面一致性',
+        lengthRatio: '长度倍率:',
+        estimate: '预估完成时间',
+        estimateText: '共',
+        row: '行',
+        lang: '种语言',
+        request: '次请求，预计',
+        startTranslate: '开始翻译',
+        progressTitle: '翻译进度',
+        previewTitle: '数据预览',
+        moreRows: '还有',
+        rows: '行...',
+        resultTitle: '翻译结果',
+        overLimitWarning: '有',
+        overLimitText: '个单元格超出长度限制，已高亮显示',
+        allGood: '翻译完成，所有结果均在长度限制内',
+        download: '下载翻译后的 CSV',
+        apiSettings: 'API 设置',
+        apiType: 'API 类型',
+        deepseek: 'DeepSeek',
+        openaiCompat: 'OpenAI 兼容',
+        apiKey: 'API Key',
+        apiBase: 'Base URL',
+        modelName: '模型名称',
+        required: '*必填',
+        sourceColumn: '源语言',
+        errorFileEmpty: 'CSV 文件为空',
+        errorFileFormat: '请上传 CSV 格式的文件',
+        errorApiKey: '请输入 API Key',
+        errorApiConfig: '请完善 API 配置',
+        translating: '正在翻译',
+        remaining: '剩余',
+        seconds: '秒',
+        minutes: '分钟',
+        hours: '小时',
+        moreRowsPreview: '行...',
+        switchToEN: 'EN'
+    },
+    en: {
+        title: 'AI CSV Translator',
+        subtitle: 'Batch CSV Translation Tool powered by AI',
+        uploadTitle: 'Upload CSV File',
+        uploadHint: 'Supports .csv format (UTF-8)',
+        uploadAreaText: 'Click to select or drag file here',
+        sourceLang: 'Source Language',
+        sourceLangLabel: 'Select the language of the first column:',
+        targetLang: 'Select Target Languages',
+        selectedCount: 'Selected',
+        langCount: 'languages',
+        advanced: 'Advanced',
+        enableLengthControl: 'Enable length control',
+        lengthHint: 'Limit translation length to a multiple of source text. Great for i18n UI development to keep consistency.',
+        lengthRatio: 'Length Ratio:',
+        estimate: 'Estimated Time',
+        estimateText: '',
+        row: 'rows ×',
+        lang: 'langs =',
+        request: 'requests, ~',
+        startTranslate: 'Start Translation',
+        progressTitle: 'Translation Progress',
+        previewTitle: 'Data Preview',
+        moreRows: '',
+        rows: 'more rows...',
+        resultTitle: 'Translation Result',
+        overLimitWarning: '',
+        overLimitText: 'cells exceeded length limit, highlighted',
+        allGood: 'All translations within length limit',
+        download: 'Download Translated CSV',
+        apiSettings: 'API Settings',
+        apiType: 'API Type',
+        deepseek: 'DeepSeek',
+        openaiCompat: 'OpenAI Compatible',
+        apiKey: 'API Key',
+        apiBase: 'Base URL',
+        modelName: 'Model Name',
+        required: '*Required',
+        sourceColumn: 'Source',
+        errorFileEmpty: 'CSV file is empty',
+        errorFileFormat: 'Please upload a CSV file',
+        errorApiKey: 'Please enter API Key',
+        errorApiConfig: 'Please complete API settings',
+        translating: 'Translating',
+        remaining: '',
+        seconds: 'sec',
+        minutes: 'min',
+        hours: 'hrs',
+        moreRowsPreview: 'more rows...',
+        switchToEN: '中文'
+    }
+};
+
+// 当前语言
+let currentLang = 'zh';
+
 // 语言配置
 const LANGUAGES = [
     { code: 'en', name: 'English', nativeName: '英文' },
@@ -81,10 +190,96 @@ const elements = {
 
 // 初始化
 function init() {
+    // 加载语言设置
+    currentLang = localStorage.getItem('csvTranslatorLang') || 'zh';
+
     renderLanguageGrid();
     setupEventListeners();
     updateAPIFields();
     loadSettings();
+    updateUIText();
+}
+
+// 切换语言
+function toggleLang() {
+    currentLang = currentLang === 'zh' ? 'en' : 'zh';
+    localStorage.setItem('csvTranslatorLang', currentLang);
+    updateUIText();
+}
+
+// 更新界面文字
+function updateUIText() {
+    const t = i18n[currentLang];
+
+    // 更新按钮文字
+    document.getElementById('langToggle').textContent = t.switchToEN;
+
+    // 更新标题
+    document.querySelector('.header h1').textContent = t.title;
+    document.querySelector('.subtitle').textContent = t.subtitle;
+
+    // 更新上传区域
+    document.querySelector('.upload-section h2').textContent = t.uploadTitle;
+    document.querySelector('.upload-area p').textContent = t.uploadAreaText;
+    document.querySelector('.upload-hint').textContent = t.uploadHint;
+
+    // 更新源语言
+    document.querySelector('.source-lang-section h2').textContent = t.sourceLang;
+    document.querySelector('.source-lang-section .form-group label').textContent = t.sourceLangLabel;
+
+    // 更新目标语言
+    document.querySelector('.target-lang-section h2').textContent = t.targetLang;
+    document.querySelector('.selected-info').innerHTML = `${t.selectedCount}: <span id="selectedCount">${state.selectedLanguages.length}</span> ${t.langCount}`;
+
+    // 更新进阶功能
+    document.querySelector('.advanced-section h2').textContent = t.advanced;
+    document.querySelector('.advanced-section .checkbox-label span').textContent = t.enableLengthControl;
+    document.querySelector('.advanced-section .hint').textContent = t.lengthHint;
+    document.querySelector('.advanced-section .form-child(2)-group:nth label').textContent = t.lengthRatio;
+
+    // 更新预估
+    document.querySelector('.estimate-section h2').textContent = t.estimate;
+
+    // 更新按钮
+    document.getElementById('translateBtn').textContent = t.startTranslate;
+
+    // 更新进度
+    document.querySelector('.progress-section h2').textContent = t.progressTitle;
+
+    // 更新预览
+    document.querySelector('.preview-section h2').textContent = t.previewTitle;
+
+    // 更新结果
+    document.querySelector('.result-section h2').textContent = t.resultTitle;
+    document.getElementById('downloadSection').querySelector('button').textContent = t.download;
+
+    // 更新 API 设置
+    document.querySelector('.settings-section h2').textContent = t.apiSettings;
+    document.querySelector('.settings-section .form-group:nth-child(1) label').textContent = t.apiType;
+    document.querySelector('.settings-section .radio-label:nth-child(1) span').textContent = t.deepseek;
+    document.querySelector('.settings-section .radio-label:nth-child(2) span').textContent = t.openaiCompat;
+    document.querySelector('.settings-section .form-group:nth-child(2) label').innerHTML = `${t.apiKey} <span class="required">${t.required}</span>`;
+    document.querySelector('.settings-section .form-group:nth-child(3) label').textContent = t.apiBase;
+    document.querySelector('.settings-section .form-group:nth-child(4) label').textContent = t.modelName;
+
+    // 更新语言选择（目标语言）
+    LANGUAGES.forEach(lang => {
+        const tag = document.querySelector(`.lang-tag[data-code="${lang.code}"]`);
+        if (tag) {
+            tag.textContent = lang.nativeName;
+        }
+    });
+
+    // 更新表格头
+    if (elements.tableHead.innerHTML) {
+        showResultTable();
+    }
+    if (elements.previewHead.innerHTML) {
+        showPreview();
+    }
+
+    // 更新预估
+    updateEstimate();
 }
 
 // 保存设置到 localStorage
@@ -348,10 +543,11 @@ function showPreview() {
         return;
     }
 
+    const t = i18n[currentLang];
     elements.previewSection.style.display = 'block';
 
     // 构建表头 - 源语言 + 目标语言(如果有选择)
-    const headerCells = ['<th>源语言</th>'];
+    const headerCells = [`<th>${t.sourceColumn}</th>`];
     if (state.selectedLanguages.length > 0) {
         state.selectedLanguages.forEach(code => {
             const lang = LANGUAGES.find(l => l.code === code);
@@ -377,7 +573,7 @@ function showPreview() {
 
     // 如果有更多行，添加提示
     if (state.csvData.length > 10) {
-        rows.push(`<tr><td colspan="${headerCells.length}" class="more-rows">还有 ${state.csvData.length - 10} 行...</td></tr>`);
+        rows.push(`<tr><td colspan="${headerCells.length}" class="more-rows">${t.moreRows} ${state.csvData.length - 10} ${t.moreRowsPreview}</td></tr>`);
     }
 
     elements.previewBody.innerHTML = rows.join('');
@@ -390,6 +586,7 @@ function updateEstimate() {
         return;
     }
 
+    const t = i18n[currentLang];
     elements.estimateSection.style.display = 'block';
 
     const totalRequests = state.csvData.length * state.selectedLanguages.length;
@@ -401,16 +598,16 @@ function updateEstimate() {
 
     let timeText;
     if (estimatedSeconds < 60) {
-        timeText = `约 ${estimatedSeconds} 秒`;
+        timeText = `${estimatedSeconds} ${t.seconds}`;
     } else if (estimatedSeconds < 3600) {
-        timeText = `约 ${Math.ceil(estimatedSeconds / 60)} 分钟`;
+        timeText = `${Math.ceil(estimatedSeconds / 60)} ${t.minutes}`;
     } else {
-        timeText = `约 ${(estimatedSeconds / 3600).toFixed(1)} 小时`;
+        timeText = `${(estimatedSeconds / 3600).toFixed(1)} ${t.hours}`;
     }
 
     const rowCount = state.csvData.length;
     const langCount = state.selectedLanguages.length;
-    elements.estimateText.textContent = `共 ${rowCount} 行 × ${langCount} 种语言 = ${totalRequests} 次请求，预计 ${timeText}`;
+    elements.estimateText.textContent = `${t.row} ${rowCount} × ${langCount} ${t.lang} = ${totalRequests} ${t.request} ${timeText}`;
 }
 
 // 锁定配置

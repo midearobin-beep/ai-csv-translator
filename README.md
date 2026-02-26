@@ -7,6 +7,8 @@
 
 一个简洁高效的 CSV 翻译工具，利用 AI 大模型批量翻译你的 CSV 数据。
 
+[English](README_EN.md) | 中文
+
 ## ✨ 特性
 
 - 🚀 **批量翻译** - 一次上传，自动翻译成多种语言
@@ -15,6 +17,7 @@
 - 📊 **智能预览** - 上传即可预览，翻译进度实时显示
 - ⚡ **长度控制** - 进阶功能，精准控制翻译长度
 - ⏱️ **预估时间** - 翻译前显示预计完成时间
+- 🌍 **双语界面** - 中文/英文随时切换
 
 ## 🚀 快速开始
 
@@ -41,13 +44,13 @@ npx serve .
 
 4. 浏览器打开：`http://localhost:8000`
 
-### 方式二：直接打开
+### 方式二：GitHub Pages
 
-双击 `index.html`（需解决 CORS 问题，建议用方式一）
+访问：https://midearobin-beep.github.io/ai-csv-translator/
 
 ## 📖 使用方法
 
-1. **上传 CSV** - 点击上传或拖拽文件，把需要翻译的放在第一列即可，超级简单
+1. **上传 CSV** - 点击上传或拖拽文件，把需要翻译的放在第一列即可
 2. **选择语言** - 勾选目标语言
 3. **配置 API** - 填写 API Key（支持 DeepSeek / OpenAI）
 4. **开始翻译** - 点击按钮，等待完成
@@ -55,8 +58,7 @@ npx serve .
 
 ## 📷 界面预览
 
-<img width="2820" height="1606" alt="截图 1" src="https://github.com/user-attachments/assets/646669b8-5f25-4038-aa31-6c8cbea0a41d" />
-<img width="2376" height="1304" alt="截图 2" src="https://github.com/user-attachments/assets/c3273763-4aae-447e-8fa1-3e1461629da3" />
+<img width="800" alt="界面预览" src="https://github.com/user-attachments/assets/646669b8-5f25-4038-aa31-6c8cbea0a41d" />
 
 ## 🔑 API 配置
 
