@@ -42,13 +42,7 @@ body {
 .header {
     text-align: center;
     margin-bottom: 32px;
-}
-
-.header-top {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 16px;
+    position: relative;
 }
 
 .header h1 {
@@ -59,12 +53,15 @@ body {
 }
 
 .lang-toggle {
-    padding: 6px 12px;
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding: 6px 14px;
     background: var(--primary);
     color: #fff;
     border: none;
-    border-radius: 16px;
-    font-size: 12px;
+    border-radius: 4px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all var(--transition);
@@ -200,6 +197,75 @@ select:focus {
 
 .toggle-password:hover {
     opacity: 1;
+}
+
+/* Model select */
+.model-select-wrapper {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.model-select-wrapper select {
+    flex: 1;
+}
+
+.model-select-wrapper input {
+    flex: 1;
+}
+
+/* Test API button */
+.btn-test {
+    padding: 8px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all var(--transition);
+    margin-top: 4px;
+}
+
+.btn-test:hover:not(:disabled) {
+    background: #059669;
+}
+
+.btn-test:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-test.loading {
+    position: relative;
+    color: transparent;
+}
+
+.btn-test.loading::after {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.test-result {
+    font-size: 12px;
+    margin-top: 6px;
+}
+
+.test-result.success {
+    color: var(--accent);
+}
+
+.test-result.error {
+    color: var(--danger);
 }
 
 /* Radio & Checkbox */

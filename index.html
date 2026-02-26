@@ -10,11 +10,9 @@
     <div class="container">
         <!-- Header -->
         <header class="header">
-            <div class="header-top">
-                <h1>AI CSV 翻译工具</h1>
-                <button class="lang-toggle" id="langToggle" onclick="toggleLang()">EN</button>
-            </div>
+            <h1>AI CSV 翻译工具</h1>
             <p class="subtitle">基于 AI 大模型的 CSV 批量翻译工具</p>
+            <button class="lang-toggle" id="langToggle" onclick="toggleLang()">EN</button>
         </header>
 
         <!-- 文件上传 -->
@@ -221,7 +219,14 @@
 
                 <div class="form-group">
                     <label for="modelName">模型名称</label>
-                    <input type="text" id="modelName" placeholder="deepseek-chat">
+                    <div class="model-select-wrapper">
+                        <select id="modelSelect">
+                            <option value="">--</option>
+                        </select>
+                        <input type="text" id="modelName" placeholder="deepseek-chat">
+                    </div>
+                    <button class="btn-test" id="testApiBtn" onclick="testApi()">测试 API</button>
+                    <p class="test-result" id="testResult"></p>
                 </div>
             </div>
         </section>

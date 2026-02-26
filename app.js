@@ -49,7 +49,14 @@ const i18n = {
         minutes: '分钟',
         hours: '小时',
         moreRowsPreview: '行...',
-        switchToEN: 'EN'
+        switchToEN: 'EN',
+        testApi: '测试 API',
+        testing: '测试中...',
+        testSuccess: '连接成功！请选择模型',
+        testFailed: '连接失败',
+        selectModel: '选择模型',
+        customModel: '或输入自定义模型',
+        apiNotConfigured: '请先配置 API'
     },
     en: {
         title: 'AI CSV Translator',
@@ -87,7 +94,7 @@ const i18n = {
         openaiCompat: 'OpenAI Compatible',
         apiKey: 'API Key',
         apiBase: 'Base URL',
-        modelName: 'Model Name',
+        modelName: 'Model',
         required: '*Required',
         sourceColumn: 'Source',
         errorFileEmpty: 'CSV file is empty',
@@ -100,7 +107,14 @@ const i18n = {
         minutes: 'min',
         hours: 'hrs',
         moreRowsPreview: 'more rows...',
-        switchToEN: '中文'
+        switchToEN: '中文',
+        testApi: 'Test API',
+        testing: 'Testing...',
+        testSuccess: 'Connection successful! Select a model',
+        testFailed: 'Connection failed',
+        selectModel: 'Select Model',
+        customModel: 'Or enter custom model',
+        apiNotConfigured: 'Please configure API first'
     }
 };
 
@@ -185,6 +199,9 @@ const elements = {
     apiKey: document.getElementById('apiKey'),
     apiBase: document.getElementById('apiBase'),
     modelName: document.getElementById('modelName'),
+    modelSelect: document.getElementById('modelSelect'),
+    testApiBtn: document.getElementById('testApiBtn'),
+    testResult: document.getElementById('testResult'),
     settingsSection: document.getElementById('settingsSection')
 };
 
@@ -334,9 +351,10 @@ function loadSettings() {
 
 // 渲染语言选择网格
 function renderLanguageGrid() {
+    const getName = (lang) => currentLang === 'en' ? lang.name : lang.nativeName;
     elements.languageGrid.innerHTML = LANGUAGES.map(lang => `
         <div class="lang-tag" data-code="${lang.code}" onclick="toggleLanguage('${lang.code}')">
-            ${lang.nativeName}
+            ${getName(lang)}
         </div>
     `).join('');
 }
@@ -372,6 +390,12 @@ function setupEventListeners() {
     });
     elements.apiBase.addEventListener('input', saveSettings);
     elements.modelName.addEventListener('input', saveSettings);
+    elements.modelSelect.addEventListener('change', () => {
+        if (elements.modelSelect.value) {
+            elements.modelName.value = elements.modelSelect.value;
+            saveSettings();
+        }
+    });
 
     // 进阶功能开关
     elements.enableLengthControl.addEventListener('change', (e) => {
@@ -1040,6 +1064,109 @@ function togglePassword() {
     } else {
         input.type = 'password';
         icon.textContent = '👁️';
+    }
+}
+
+// 测试 API 并获取可用模型
+async function testApi() {
+    const t = i18n[currentLang];
+    const apiKey = elements.apiKey.value.trim();
+    const apiBase = elements.apiBase.value.trim();
+
+    if (!apiKey || !apiBase) {
+        elements.testResult.textContent = t.apiNotConfigured;
+        elements.testResult.className = 'test-result error';
+        return;
+    }
+
+    // 显示加载状态
+    elements.testApiBtn.disabled = true;
+    elements.testApiBtn.classList.add('loading');
+    elements.testApiBtn.textContent = t.testing;
+    elements.testResult.textContent = '';
+
+    try {
+        // 先尝试获取模型列表
+        const modelsUrl = apiBase.replace(/\/$/, '') + '/models';
+        let models = [];
+
+        try {
+            const modelsResponse = await fetch(modelsUrl, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`
+                }
+            });
+
+            if (modelsResponse.ok) {
+                const modelsData = await modelsResponse.json();
+                models = modelsData.data?.map(m => m.id) || [];
+            }
+        } catch (e) {
+            console.log('无法获取模型列表，使用默认模型');
+        }
+
+        // 测试翻译 API
+        const testResponse = await fetch(`${apiBase.replace(/\/$/, '')}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: models[0] || 'gpt-3.5-turbo',
+                messages: [{ role: 'user', content: 'Hi' }],
+                max_tokens: 5
+            })
+        });
+
+        if (testResponse.ok) {
+            elements.testResult.textContent = t.testSuccess;
+            elements.testResult.className = 'test-result success';
+
+            // 填充模型下拉框
+            elements.modelSelect.innerHTML = '';
+            if (models.length > 0) {
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    elements.modelSelect.appendChild(option);
+                });
+            } else {
+                // 添加默认选项
+                const defaultModels = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4o', 'deepseek-chat'];
+                defaultModels.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    elements.modelSelect.appendChild(option);
+                });
+            }
+
+            // 自动选择第一个模型
+            if (elements.modelSelect.options.length > 0) {
+                elements.modelSelect.selectedIndex = 0;
+                elements.modelName.value = elements.modelSelect.value;
+            }
+        } else {
+            const errorData = await testResponse.json().catch(() => ({}));
+            throw new Error(errorData.error?.message || `Error: ${testResponse.status}`);
+        }
+    } catch (error) {
+        elements.testResult.textContent = `${t.testFailed}: ${error.message}`;
+        elements.testResult.className = 'test-result error';
+    } finally {
+        elements.testApiBtn.disabled = false;
+        elements.testApiBtn.classList.remove('loading');
+        elements.testApiBtn.textContent = t.testApi;
+    }
+}
+
+// 模型选择变化时更新输入框
+function onModelSelectChange() {
+    if (elements.modelSelect.value) {
+        elements.modelName.value = elements.modelSelect.value;
     }
 }
 
