@@ -832,5 +832,19 @@ function closeError() {
     elements.errorToast.style.display = 'none';
 }
 
+// 切换密码显示/隐藏
+function togglePassword() {
+    const input = elements.apiKey;
+    const icon = document.getElementById('eyeIcon');
+
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        icon.textContent = '👁️';
+    }
+}
+
 // 初始化应用
 init();
