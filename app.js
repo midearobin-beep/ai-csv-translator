@@ -84,6 +84,57 @@ function init() {
     renderLanguageGrid();
     setupEventListeners();
     updateAPIFields();
+    loadSettings();
+}
+
+// 保存设置到 localStorage
+function saveSettings() {
+    const settings = {
+        apiType: document.querySelector('input[name="apiType"]:checked').value,
+        apiKey: elements.apiKey.value,
+        apiBase: elements.apiBase.value,
+        modelName: elements.modelName.value,
+        enableLengthControl: elements.enableLengthControl.checked,
+        lengthRatio: document.querySelector('input[name="lengthRatio"]:checked')?.value || '1.2'
+    };
+    localStorage.setItem('csvTranslatorSettings', JSON.stringify(settings));
+}
+
+// 从 localStorage 加载设置
+function loadSettings() {
+    const saved = localStorage.getItem('csvTranslatorSettings');
+    if (!saved) return;
+
+    try {
+        const settings = JSON.parse(saved);
+
+        // 恢复 API 类型
+        const apiTypeRadios = document.querySelectorAll('input[name="apiType"]');
+        apiTypeRadios.forEach(radio => {
+            radio.checked = radio.value === settings.apiType;
+        });
+        updateAPIFields();
+
+        // 恢复 API 配置
+        if (settings.apiKey) elements.apiKey.value = settings.apiKey;
+        if (settings.apiBase) elements.apiBase.value = settings.apiBase;
+        if (settings.modelName) elements.modelName.value = settings.modelName;
+
+        // 恢复进阶功能设置
+        if (settings.enableLengthControl) {
+            elements.enableLengthControl.checked = true;
+            elements.lengthControlOptions.style.display = 'block';
+        }
+
+        const ratioRadios = document.querySelectorAll('input[name="lengthRatio"]');
+        ratioRadios.forEach(radio => {
+            radio.checked = radio.value === settings.lengthRatio;
+        });
+
+        updateTranslateButton();
+    } catch (e) {
+        console.error('加载设置失败:', e);
+    }
 }
 
 // 渲染语言选择网格
@@ -113,18 +164,33 @@ function setupEventListeners() {
 
     // API 类型切换
     document.querySelectorAll('input[name="apiType"]').forEach(radio => {
-        radio.addEventListener('change', updateAPIFields);
+        radio.addEventListener('change', () => {
+            updateAPIFields();
+            saveSettings();
+        });
     });
+
+    // API 输入变化时保存
+    elements.apiKey.addEventListener('input', () => {
+        saveSettings();
+        updateTranslateButton();
+    });
+    elements.apiBase.addEventListener('input', saveSettings);
+    elements.modelName.addEventListener('input', saveSettings);
 
     // 进阶功能开关
     elements.enableLengthControl.addEventListener('change', (e) => {
         elements.lengthControlOptions.style.display = e.target.checked ? 'block' : 'none';
+        saveSettings();
         updateEstimate();
     });
 
     // 倍率选择变化
     document.querySelectorAll('input[name="lengthRatio"]').forEach(radio => {
-        radio.addEventListener('change', updateEstimate);
+        radio.addEventListener('change', () => {
+            saveSettings();
+            updateEstimate();
+        });
     });
 
     // 源语言变化
@@ -765,9 +831,6 @@ function showError(message) {
 function closeError() {
     elements.errorToast.style.display = 'none';
 }
-
-// 监听 API Key 变化
-elements.apiKey.addEventListener('input', updateTranslateButton);
 
 // 初始化应用
 init();
