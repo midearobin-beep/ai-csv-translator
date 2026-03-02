@@ -1,4 +1,7 @@
-// UI 翻译
+// AI CSV 翻译工具
+// Version: 1.0.0 (SemVer)
+const VERSION = '1.2.1';
+
 const i18n = {
     zh: {
         title: 'AI CSV 翻译工具',
@@ -162,9 +165,12 @@ const state = {
     isTranslating: false,
     isConfigured: false,
     originalFileName: '',
+    fileExtension: '',
     totalRequests: 0,
     completedRequests: 0,
-    startTime: null
+    startTime: null,
+    translateMode: 'multi', // 'multi' 多语言列表, 'single' 单语言替换
+    singleTargetLang: 'en'
 };
 
 // DOM 元素
@@ -202,7 +208,11 @@ const elements = {
     modelSelect: document.getElementById('modelSelect'),
     testApiBtn: document.getElementById('testApiBtn'),
     testResult: document.getElementById('testResult'),
-    settingsSection: document.getElementById('settingsSection')
+    settingsSection: document.getElementById('settingsSection'),
+    singleLangSection: document.getElementById('singleLangSection'),
+    singleTargetLang: document.getElementById('singleTargetLang'),
+    targetLangSection: document.querySelector('.target-lang-section'),
+    sourceLangSection: document.getElementById('sourceLangSection')
 };
 
 // 初始化
@@ -222,6 +232,28 @@ function toggleLang() {
     currentLang = currentLang === 'zh' ? 'en' : 'zh';
     localStorage.setItem('csvTranslatorLang', currentLang);
     updateUIText();
+}
+
+// 切换翻译模式
+function onModeChange() {
+    const mode = document.querySelector('input[name="translateMode"]:checked').value;
+    state.translateMode = mode;
+
+    if (mode === 'single') {
+        // 单语言替换模式：隐藏多语言选择，显示单语言选择
+        elements.targetLangSection.style.display = 'none';
+        elements.singleLangSection.style.display = 'block';
+        state.selectedLanguages = [elements.singleTargetLang.value];
+    } else {
+        // 多语言列表模式：显示多语言选择，隐藏单语言选择
+        elements.targetLangSection.style.display = 'block';
+        elements.singleLangSection.style.display = 'none';
+        state.selectedLanguages = [];
+    }
+
+    showPreview();
+    updateEstimate();
+    updateTranslateButton();
 }
 
 // 更新界面文字
@@ -252,7 +284,7 @@ function updateUIText() {
     document.querySelector('.advanced-section h2').textContent = t.advanced;
     document.querySelector('.advanced-section .checkbox-label span').textContent = t.enableLengthControl;
     document.querySelector('.advanced-section .hint').textContent = t.lengthHint;
-    document.querySelector('.advanced-section .form-child(2)-group:nth label').textContent = t.lengthRatio;
+    document.querySelector('.length-control-options > label').textContent = t.lengthRatio;
 
     // 更新预估
     document.querySelector('.estimate-section h2').textContent = t.estimate;
@@ -416,6 +448,14 @@ function setupEventListeners() {
     elements.sourceLang.addEventListener('change', () => {
         state.sourceLang = elements.sourceLang.value;
     });
+
+    // 单语言目标语言变化
+    elements.singleTargetLang.addEventListener('change', () => {
+        state.singleTargetLang = elements.singleTargetLang.value;
+        state.selectedLanguages = [elements.singleTargetLang.value];
+        updateEstimate();
+        updateTranslateButton();
+    });
 }
 
 // 更新 API 字段
@@ -446,26 +486,72 @@ function handleFileDrop(e) {
     e.preventDefault();
     elements.uploadArea.classList.remove('dragover');
     const file = e.dataTransfer.files[0];
-    if (file && file.name.endsWith('.csv')) {
+    if (file && (file.name.endsWith('.csv') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls'))) {
         processFile(file);
     } else {
-        showError('请上传 CSV 格式的文件');
+        showError('请上传 CSV 或 Excel 格式的文件');
     }
 }
 
 // 处理文件
 function processFile(file) {
-    state.originalFileName = file.name.replace('.csv', '');
-    elements.fileName.textContent = file.name;
+    const fileName = file.name;
+    const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+
+    state.originalFileName = fileName.replace(/\.(csv|xlsx|xls)$/i, '');
+    state.fileExtension = extension;
+    elements.fileName.textContent = fileName;
     elements.fileInfo.style.display = 'flex';
     elements.uploadArea.style.display = 'none';
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const csv = e.target.result;
-        parseCSV(csv);
-    };
-    reader.readAsText(file, 'UTF-8');
+    if (extension === '.csv') {
+        // 处理 CSV 文件
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const csv = e.target.result;
+            parseCSV(csv);
+        };
+        reader.readAsText(file, 'UTF-8');
+    } else if (extension === '.xlsx' || extension === '.xls') {
+        // 处理 Excel 文件
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // 读取第一个工作表
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+
+                // 转换为二维数组
+                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (jsonData.length === 0) {
+                    showError('Excel 文件为空');
+                    return;
+                }
+
+                // 保存表头和数据
+                state.headers = jsonData[0].map(h => String(h || ''));
+                state.csvData = jsonData.slice(1).filter(row => row.length > 0 && row.some(cell => cell !== null && cell !== undefined && String(cell).trim() !== ''));
+
+                // 显示文件统计信息
+                elements.fileStats.textContent = `${state.csvData.length} 行`;
+
+                // 默认选择第一列作为源语言
+                state.sourceLang = elements.sourceLang.value;
+
+                updateTranslateButton();
+                showPreview();
+                updateEstimate();
+            } catch (error) {
+                console.error('Excel 解析错误:', error);
+                showError('Excel 文件解析失败: ' + error.message);
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
 }
 
 // 解析 CSV
@@ -570,37 +656,58 @@ function showPreview() {
     const t = i18n[currentLang];
     elements.previewSection.style.display = 'block';
 
-    // 构建表头 - 源语言 + 目标语言(如果有选择)
-    const headerCells = [`<th>${t.sourceColumn}</th>`];
-    if (state.selectedLanguages.length > 0) {
-        state.selectedLanguages.forEach(code => {
-            const lang = LANGUAGES.find(l => l.code === code);
-            headerCells.push(`<th>${lang?.nativeName || code}</th>`);
+    if (state.translateMode === 'single') {
+        // 单语言替换模式：显示原始表格结构
+        const headerCells = state.headers.map(h => `<th>${escapeHtml(h)}</th>`);
+        elements.previewHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
+
+        // 限制预览显示前10行
+        const previewRows = state.csvData.slice(0, 10);
+        const rows = previewRows.map(row => {
+            const cells = row.map(cell => `<td>${escapeHtml(String(cell || ''))}</td>`);
+            return `<tr>${cells.join('')}</tr>`;
         });
-    }
-    elements.previewHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
 
-    // 限制预览显示前10行
-    const previewRows = state.csvData.slice(0, 10);
-    const rows = previewRows.map(row => {
-        const cells = [`<td class="source-column">${escapeHtml(row[0])}</td>`];
-
-        // 显示占位符
-        if (state.selectedLanguages.length > 0) {
-            state.selectedLanguages.forEach(() => {
-                cells.push('<td class="pending-cell">-</td>');
-            });
+        // 如果有更多行，添加提示
+        if (state.csvData.length > 10) {
+            rows.push(`<tr><td colspan="${state.headers.length}" class="more-rows">${t.moreRows} ${state.csvData.length - 10} ${t.moreRowsPreview}</td></tr>`);
         }
 
-        return `<tr>${cells.join('')}</tr>`;
-    });
+        elements.previewBody.innerHTML = rows.join('');
+    } else {
+        // 多语言列表模式：源语言 + 目标语言
+        // 构建表头 - 源语言 + 目标语言(如果有选择)
+        const headerCells = [`<th>${t.sourceColumn}</th>`];
+        if (state.selectedLanguages.length > 0) {
+            state.selectedLanguages.forEach(code => {
+                const lang = LANGUAGES.find(l => l.code === code);
+                headerCells.push(`<th>${lang?.nativeName || code}</th>`);
+            });
+        }
+        elements.previewHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
 
-    // 如果有更多行，添加提示
-    if (state.csvData.length > 10) {
-        rows.push(`<tr><td colspan="${headerCells.length}" class="more-rows">${t.moreRows} ${state.csvData.length - 10} ${t.moreRowsPreview}</td></tr>`);
+        // 限制预览显示前10行
+        const previewRows = state.csvData.slice(0, 10);
+        const rows = previewRows.map(row => {
+            const cells = [`<td class="source-column">${escapeHtml(String(row[0] || ''))}</td>`];
+
+            // 显示占位符
+            if (state.selectedLanguages.length > 0) {
+                state.selectedLanguages.forEach(() => {
+                    cells.push('<td class="pending-cell">-</td>');
+                });
+            }
+
+            return `<tr>${cells.join('')}</tr>`;
+        });
+
+        // 如果有更多行，添加提示
+        if (state.csvData.length > 10) {
+            rows.push(`<tr><td colspan="${headerCells.length}" class="more-rows">${t.moreRows} ${state.csvData.length - 10} ${t.moreRowsPreview}</td></tr>`);
+        }
+
+        elements.previewBody.innerHTML = rows.join('');
     }
-
-    elements.previewBody.innerHTML = rows.join('');
 }
 
 // 更新预估时间
@@ -613,25 +720,55 @@ function updateEstimate() {
     const t = i18n[currentLang];
     elements.estimateSection.style.display = 'block';
 
-    const totalRequests = state.csvData.length * state.selectedLanguages.length;
-    state.totalRequests = totalRequests;
+    let totalRequests;
+    let estimateText;
 
-    // 预估时间 = 请求数 * 每次请求耗时
-    const estimatedMs = totalRequests * ESTIMATED_TIME_PER_REQUEST;
-    const estimatedSeconds = Math.ceil(estimatedMs / 1000);
+    if (state.translateMode === 'single') {
+        // 单语言替换模式：行数 × 列数
+        const rowCount = state.csvData.length;
+        const colCount = state.csvData[0] ? state.csvData[0].length : 0;
+        totalRequests = rowCount * colCount;
+        state.totalRequests = totalRequests;
 
-    let timeText;
-    if (estimatedSeconds < 60) {
-        timeText = `${estimatedSeconds} ${t.seconds}`;
-    } else if (estimatedSeconds < 3600) {
-        timeText = `${Math.ceil(estimatedSeconds / 60)} ${t.minutes}`;
+        // 预估时间 = 请求数 * 每次请求耗时
+        const estimatedMs = totalRequests * ESTIMATED_TIME_PER_REQUEST;
+        const estimatedSeconds = Math.ceil(estimatedMs / 1000);
+
+        let timeText;
+        if (estimatedSeconds < 60) {
+            timeText = `${estimatedSeconds} ${t.seconds}`;
+        } else if (estimatedSeconds < 3600) {
+            timeText = `${Math.ceil(estimatedSeconds / 60)} ${t.minutes}`;
+        } else {
+            timeText = `${(estimatedSeconds / 3600).toFixed(1)} ${t.hours}`;
+        }
+
+        const targetLangName = LANGUAGES.find(l => l.code === state.selectedLanguages[0])?.nativeName || state.selectedLanguages[0];
+        estimateText = `${rowCount} 行 × ${colCount} 列 = ${totalRequests} 次请求，翻译成 ${targetLangName}，预计 ${timeText}`;
     } else {
-        timeText = `${(estimatedSeconds / 3600).toFixed(1)} ${t.hours}`;
+        // 多语言列表模式
+        totalRequests = state.csvData.length * state.selectedLanguages.length;
+        state.totalRequests = totalRequests;
+
+        // 预估时间 = 请求数 * 每次请求耗时
+        const estimatedMs = totalRequests * ESTIMATED_TIME_PER_REQUEST;
+        const estimatedSeconds = Math.ceil(estimatedMs / 1000);
+
+        let timeText;
+        if (estimatedSeconds < 60) {
+            timeText = `${estimatedSeconds} ${t.seconds}`;
+        } else if (estimatedSeconds < 3600) {
+            timeText = `${Math.ceil(estimatedSeconds / 60)} ${t.minutes}`;
+        } else {
+            timeText = `${(estimatedSeconds / 3600).toFixed(1)} ${t.hours}`;
+        }
+
+        const rowCount = state.csvData.length;
+        const langCount = state.selectedLanguages.length;
+        estimateText = `${t.row} ${rowCount} × ${langCount} ${t.lang} = ${totalRequests} ${t.request} ${timeText}`;
     }
 
-    const rowCount = state.csvData.length;
-    const langCount = state.selectedLanguages.length;
-    elements.estimateText.textContent = `${t.row} ${rowCount} × ${langCount} ${t.lang} = ${totalRequests} ${t.request} ${timeText}`;
+    elements.estimateText.textContent = estimateText;
 }
 
 // 锁定配置
@@ -709,25 +846,41 @@ async function startTranslation() {
     elements.resultSection.style.display = 'none';
     elements.previewSection.style.display = 'none';
 
+    const enableLengthControl = elements.enableLengthControl.checked;
+    const lengthRatio = enableLengthControl ?
+        parseFloat(document.querySelector('input[name="lengthRatio"]:checked').value) : 2.0;
+
+    // 根据模式选择不同的翻译逻辑
+    if (state.translateMode === 'single') {
+        // 单语言替换模式：翻译所有单元格
+        await translateSingleMode(apiKey, apiBase, model, enableLengthControl, lengthRatio);
+    } else {
+        // 多语言列表模式：只翻译第一列
+        await translateMultiMode(apiKey, apiBase, model, enableLengthControl, lengthRatio);
+    }
+
+    state.isTranslating = false;
+    elements.translateBtn.disabled = false;
+    showResultTable();
+}
+
+// 多语言列表模式翻译（原有逻辑）
+async function translateMultiMode(apiKey, apiBase, model, enableLengthControl, lengthRatio) {
     const totalTasks = state.csvData.length * state.selectedLanguages.length;
     let completedTasks = 0;
 
     // 初始化翻译数据
     state.translatedData = state.csvData.map(row => ({
-        source: row[0],
+        source: String(row[0] || ''),
         translations: {}
     }));
-
-    const enableLengthControl = elements.enableLengthControl.checked;
-    const lengthRatio = enableLengthControl ?
-        parseFloat(document.querySelector('input[name="lengthRatio"]:checked').value) : 2.0;
 
     // 逐个目标语言翻译
     for (const langCode of state.selectedLanguages) {
         const langName = LANGUAGES.find(l => l.code === langCode)?.nativeName || langCode;
 
         for (let i = 0; i < state.csvData.length; i++) {
-            const sourceText = state.csvData[i][0];
+            const sourceText = String(state.csvData[i][0] || '');
 
             if (!sourceText || sourceText.trim() === '') {
                 state.translatedData[i].translations[langCode] = {
@@ -767,10 +920,80 @@ async function startTranslation() {
             updateProgress(completedTasks, totalTasks, `正在翻译: ${langName}`);
         }
     }
+}
 
-    state.isTranslating = false;
-    elements.translateBtn.disabled = false;
-    showResultTable();
+// 单语言替换模式翻译
+async function translateSingleMode(apiKey, apiBase, model, enableLengthControl, lengthRatio) {
+    const targetLangCode = state.selectedLanguages[0];
+    const targetLangName = LANGUAGES.find(l => l.code === targetLangCode)?.nativeName || targetLangCode;
+    const totalTasks = state.csvData.length * state.csvData[0].length;
+    let completedTasks = 0;
+
+    // 初始化翻译数据：二维数组，直接替换原位置
+    state.translatedData = state.csvData.map(row =>
+        row.map(() => ({
+            text: '',
+            isOverLimit: false
+        }))
+    );
+
+    // 逐行逐列翻译
+    for (let i = 0; i < state.csvData.length; i++) {
+        for (let j = 0; j < state.csvData[i].length; j++) {
+            const sourceText = String(state.csvData[i][j] || '');
+
+            // 检测是否为空
+            if (!sourceText || sourceText.trim() === '') {
+                state.translatedData[i][j] = {
+                    text: '',
+                    isOverLimit: false
+                };
+                completedTasks++;
+                state.completedRequests++;
+                updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+                continue;
+            }
+
+            // 检测是否纯数字（包括小数、负数、百分数等）
+            if (isNumeric(sourceText)) {
+                // 纯数字：跳过翻译，保持原值
+                state.translatedData[i][j] = {
+                    text: sourceText,
+                    isOverLimit: false
+                };
+                completedTasks++;
+                state.completedRequests++;
+                updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+                continue;
+            }
+
+            try {
+                const result = await translateText(
+                    sourceText,
+                    targetLangCode,
+                    targetLangName,
+                    apiKey,
+                    apiBase,
+                    model,
+                    enableLengthControl,
+                    lengthRatio
+                );
+
+                state.translatedData[i][j] = result;
+            } catch (error) {
+                console.error('翻译错误:', error);
+                state.translatedData[i][j] = {
+                    text: `[翻译失败: ${error.message}]`,
+                    isOverLimit: false,
+                    error: true
+                };
+            }
+
+            completedTasks++;
+            state.completedRequests++;
+            updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+        }
+    }
 }
 
 // 翻译单条文本
@@ -835,6 +1058,23 @@ async function translateText(text, targetCode, targetName, apiKey, apiBase, mode
     };
 }
 
+// 检测是否为纯数字（包括整数、小数、负数、百分数、货币符号等）
+function isNumeric(str) {
+    if (!str || typeof str !== 'string') return false;
+
+    // 移除常见的数字格式字符（前后的货币符号等）
+    let numericStr = str.replace(/^[$-€£¥%‰°]+|[$-€£¥%‰°]+$/g, '').trim();
+
+    // 移除逗号（千分位）
+    numericStr = numericStr.replace(/,/g, '');
+
+    // 检查是否为空
+    if (!numericStr.length === 0) return false;
+
+    // 检查是否为纯数字（支持整数、小数、负数、科学计数法）
+    return /^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(numericStr);
+}
+
 // 计算英文字符数
 function countEnglishChars(str) {
     // 将所有全角字符转换为半角，中文字符按2个字符计算
@@ -890,6 +1130,19 @@ function showResultTable() {
     elements.resultSection.style.display = 'block';
     elements.progressSection.style.display = 'none';
 
+    // 根据模式渲染不同的表格
+    if (state.translateMode === 'single') {
+        showSingleModeResult();
+    } else {
+        showMultiModeResult();
+    }
+
+    // 滚动到结果区域
+    elements.resultSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+// 多语言列表模式结果展示
+function showMultiModeResult() {
     // 统计超长单元格数量
     let overLimitCount = 0;
     state.translatedData.forEach(row => {
@@ -943,9 +1196,57 @@ function showResultTable() {
     });
 
     elements.tableBody.innerHTML = rows.join('');
+}
 
-    // 滚动到结果区域
-    elements.resultSection.scrollIntoView({ behavior: 'smooth' });
+// 单语言替换模式结果展示
+function showSingleModeResult() {
+    const targetLangCode = state.selectedLanguages[0];
+    const targetLangName = LANGUAGES.find(l => l.code === targetLangCode)?.nativeName || targetLangCode;
+
+    // 统计超长单元格数量
+    let overLimitCount = 0;
+    state.translatedData.forEach(row => {
+        row.forEach(cell => {
+            if (cell?.isOverLimit) {
+                overLimitCount++;
+            }
+        });
+    });
+
+    // 显示统计信息
+    if (overLimitCount > 0) {
+        elements.resultSummary.innerHTML = `<span class="summary-warning">⚠️ 有 ${overLimitCount} 个单元格超出长度限制，已高亮显示</span>`;
+    } else {
+        elements.resultSummary.innerHTML = `<span class="summary-success">✓ 翻译完成，所有结果均在长度限制内</span>`;
+    }
+    elements.resultSummary.style.display = 'block';
+
+    // 显示下载按钮
+    elements.downloadSection.style.display = 'block';
+
+    // 构建表头 - 使用原始表头
+    const headerCells = state.headers.map(h => `<th>${escapeHtml(h)}</th>`);
+    elements.tableHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
+
+    // 构建表格内容 - 直接显示翻译后的二维数组
+    const rows = state.translatedData.map((row) => {
+        const cells = row.map(cell => {
+            let cellClass = '';
+            let cellContent = cell?.text || '-';
+
+            if (cell?.isOverLimit) {
+                cellClass = 'cell-warning';
+            }
+            if (cell?.error) {
+                cellClass = '';
+            }
+
+            return `<td class="${cellClass}">${escapeHtml(cellContent)}</td>`;
+        });
+        return `<tr>${cells.join('')}</tr>`;
+    });
+
+    elements.tableBody.innerHTML = rows.join('');
 }
 
 // HTML 转义
@@ -957,26 +1258,69 @@ function escapeHtml(text) {
 
 // 下载 CSV
 function downloadCSV() {
-    const headers = ['源语言', ...state.selectedLanguages.map(code => {
-        const lang = LANGUAGES.find(l => l.code === code);
-        return lang?.nativeName || code;
-    })];
+    let data;
+    let mimeType;
+    let extension;
 
-    const rows = state.translatedData.map(row => {
-        const rowData = [row.source];
-        state.selectedLanguages.forEach(code => {
-            rowData.push(row.translations[code]?.text || '');
+    if (state.translateMode === 'single') {
+        // 单语言替换模式：使用原始表头，翻译后的二维数组
+        const headers = state.headers;
+        const rows = state.translatedData.map(row =>
+            row.map(cell => cell?.text || '')
+        );
+        data = [headers, ...rows];
+    } else {
+        // 多语言列表模式
+        const headers = ['源语言', ...state.selectedLanguages.map(code => {
+            const lang = LANGUAGES.find(l => l.code === code);
+            return lang?.nativeName || code;
+        })];
+
+        const rows = state.translatedData.map(row => {
+            const rowData = [row.source];
+            state.selectedLanguages.forEach(code => {
+                rowData.push(row.translations[code]?.text || '');
+            });
+            return rowData;
         });
-        return rowData.map(cell => escapeCSVCell(cell)).join(',');
-    });
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' });
+        data = [headers, ...rows];
+    }
+
+    // 根据输入文件扩展名确定输出格式
+    const inputExt = state.fileExtension || '.csv';
+
+    if (inputExt === '.xlsx' || inputExt === '.xls') {
+        // 导出为 Excel 格式
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+        const wbout = XLSX.write(wb, { bookType: inputExt === '.xlsx' ? 'xlsx' : 'xls', type: 'array' });
+        mimeType = inputExt === '.xlsx'
+            ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            : 'application/vnd.ms-excel';
+        extension = inputExt;
+
+        const blob = new Blob([wbout], { type: mimeType });
+        downloadBlob(blob, extension);
+    } else {
+        // 导出为 CSV 格式
+        const csvContent = data.map(row =>
+            row.map(cell => escapeCSVCell(cell)).join(',')
+        ).join('\n');
+
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8' });
+        extension = '.csv';
+        downloadBlob(blob, extension);
+    }
+}
+
+function downloadBlob(blob, extension) {
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${state.originalFileName}_translated.csv`;
+    a.download = `${state.originalFileName}_translated${extension}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
