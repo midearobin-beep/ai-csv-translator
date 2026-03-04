@@ -1,6 +1,6 @@
 // AI CSV 翻译工具
 // Version: 1.0.0 (SemVer)
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 
 const i18n = {
     zh: {
@@ -864,7 +864,26 @@ async function startTranslation() {
     showResultTable();
 }
 
-// 多语言列表模式翻译（原有逻辑）
+// Promise 并发池控制
+async function asyncPool(poolLimit, array, iteratorFn) {
+    const ret = [];
+    const executing = [];
+    for (const item of array) {
+        const p = Promise.resolve().then(() => iteratorFn(item, array));
+        ret.push(p);
+
+        if (poolLimit <= array.length) {
+            const e = p.then(() => executing.splice(executing.indexOf(e), 1));
+            executing.push(e);
+            if (executing.length >= poolLimit) {
+                await Promise.race(executing);
+            }
+        }
+    }
+    return Promise.all(ret);
+}
+
+// 多语言列表模式翻译（并发重构版）
 async function translateMultiMode(apiKey, apiBase, model, enableLengthControl, lengthRatio) {
     const totalTasks = state.csvData.length * state.selectedLanguages.length;
     let completedTasks = 0;
@@ -875,54 +894,66 @@ async function translateMultiMode(apiKey, apiBase, model, enableLengthControl, l
         translations: {}
     }));
 
-    // 逐个目标语言翻译
+    // 构建所有的翻译任务
+    const tasks = [];
     for (const langCode of state.selectedLanguages) {
         const langName = LANGUAGES.find(l => l.code === langCode)?.nativeName || langCode;
-
         for (let i = 0; i < state.csvData.length; i++) {
-            const sourceText = String(state.csvData[i][0] || '');
+            tasks.push({
+                langCode,
+                langName,
+                rowIndex: i,
+                sourceText: String(state.csvData[i][0] || '')
+            });
+        }
+    }
 
-            if (!sourceText || sourceText.trim() === '') {
-                state.translatedData[i].translations[langCode] = {
-                    text: '',
-                    isOverLimit: false
-                };
-                completedTasks++;
-                state.completedRequests++;
-                updateProgress(completedTasks, totalTasks, `正在翻译: ${langName}`);
-                continue;
-            }
+    const CONCURRENCY_LIMIT = 5; // 控制最大并发数为 5
 
-            try {
-                const result = await translateText(
-                    sourceText,
-                    langCode,
-                    langName,
-                    apiKey,
-                    apiBase,
-                    model,
-                    enableLengthControl,
-                    lengthRatio
-                );
+    // 执行并发队列
+    await asyncPool(CONCURRENCY_LIMIT, tasks, async (task) => {
+        const { langCode, langName, rowIndex, sourceText } = task;
 
-                state.translatedData[i].translations[langCode] = result;
-            } catch (error) {
-                console.error('翻译错误:', error);
-                state.translatedData[i].translations[langCode] = {
-                    text: `[翻译失败: ${error.message}]`,
-                    isOverLimit: false,
-                    error: true
-                };
-            }
-
+        if (!sourceText || sourceText.trim() === '') {
+            state.translatedData[rowIndex].translations[langCode] = {
+                text: '',
+                isOverLimit: false
+            };
             completedTasks++;
             state.completedRequests++;
             updateProgress(completedTasks, totalTasks, `正在翻译: ${langName}`);
+            return;
         }
-    }
+
+        try {
+            const result = await translateText(
+                sourceText,
+                langCode,
+                langName,
+                apiKey,
+                apiBase,
+                model,
+                enableLengthControl,
+                lengthRatio
+            );
+
+            state.translatedData[rowIndex].translations[langCode] = result;
+        } catch (error) {
+            console.error('翻译错误:', error);
+            state.translatedData[rowIndex].translations[langCode] = {
+                text: `[翻译失败: ${error.message}]`,
+                isOverLimit: false,
+                error: true
+            };
+        }
+
+        completedTasks++;
+        state.completedRequests++;
+        updateProgress(completedTasks, totalTasks, `正在翻译: ${langName}`);
+    });
 }
 
-// 单语言替换模式翻译
+// 单语言替换模式翻译（并发重构版）
 async function translateSingleMode(apiKey, apiBase, model, enableLengthControl, lengthRatio) {
     const targetLangCode = state.selectedLanguages[0];
     const targetLangName = LANGUAGES.find(l => l.code === targetLangCode)?.nativeName || targetLangCode;
@@ -937,63 +968,71 @@ async function translateSingleMode(apiKey, apiBase, model, enableLengthControl, 
         }))
     );
 
-    // 逐行逐列翻译
+    // 构建所有的翻译任务
+    const tasks = [];
     for (let i = 0; i < state.csvData.length; i++) {
         for (let j = 0; j < state.csvData[i].length; j++) {
-            const sourceText = String(state.csvData[i][j] || '');
+            tasks.push({ rowIndex: i, colIndex: j, sourceText: String(state.csvData[i][j] || '') });
+        }
+    }
 
-            // 检测是否为空
-            if (!sourceText || sourceText.trim() === '') {
-                state.translatedData[i][j] = {
-                    text: '',
-                    isOverLimit: false
-                };
-                completedTasks++;
-                state.completedRequests++;
-                updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
-                continue;
-            }
+    const CONCURRENCY_LIMIT = 5; // 控制最大并发数为 5
 
-            // 检测是否纯数字（包括小数、负数、百分数等）
-            if (isNumeric(sourceText)) {
-                // 纯数字：跳过翻译，保持原值
-                state.translatedData[i][j] = {
-                    text: sourceText,
-                    isOverLimit: false
-                };
-                completedTasks++;
-                state.completedRequests++;
-                updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
-                continue;
-            }
+    // 执行并发队列
+    await asyncPool(CONCURRENCY_LIMIT, tasks, async (task) => {
+        const { rowIndex, colIndex, sourceText } = task;
 
-            try {
-                const result = await translateText(
-                    sourceText,
-                    targetLangCode,
-                    targetLangName,
-                    apiKey,
-                    apiBase,
-                    model,
-                    enableLengthControl,
-                    lengthRatio
-                );
-
-                state.translatedData[i][j] = result;
-            } catch (error) {
-                console.error('翻译错误:', error);
-                state.translatedData[i][j] = {
-                    text: `[翻译失败: ${error.message}]`,
-                    isOverLimit: false,
-                    error: true
-                };
-            }
-
+        // 检测是否为空
+        if (!sourceText || sourceText.trim() === '') {
+            state.translatedData[rowIndex][colIndex] = {
+                text: '',
+                isOverLimit: false
+            };
             completedTasks++;
             state.completedRequests++;
             updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+            return;
         }
-    }
+
+        // 检测是否纯数字（包括小数、负数、百分数等）
+        if (isNumeric(sourceText)) {
+            // 纯数字：跳过翻译，保持原值
+            state.translatedData[rowIndex][colIndex] = {
+                text: sourceText,
+                isOverLimit: false
+            };
+            completedTasks++;
+            state.completedRequests++;
+            updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+            return;
+        }
+
+        try {
+            const result = await translateText(
+                sourceText,
+                targetLangCode,
+                targetLangName,
+                apiKey,
+                apiBase,
+                model,
+                enableLengthControl,
+                lengthRatio
+            );
+
+            state.translatedData[rowIndex][colIndex] = result;
+        } catch (error) {
+            console.error('翻译错误:', error);
+            state.translatedData[rowIndex][colIndex] = {
+                text: `[翻译失败: ${error.message}]`,
+                isOverLimit: false,
+                error: true
+            };
+        }
+
+        completedTasks++;
+        state.completedRequests++;
+        updateProgress(completedTasks, totalTasks, `正在翻译: ${targetLangName}`);
+    });
 }
 
 // 翻译单条文本
@@ -1172,8 +1211,17 @@ function showMultiModeResult() {
     });
     elements.tableHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
 
+    // 为防止超大表格导致渲染崩溃，前端仅提供前一百条预览
+    const MAX_PREVIEW_ROWS = 100;
+    const isTruncated = state.translatedData.length > MAX_PREVIEW_ROWS;
+    const renderData = isTruncated ? state.translatedData.slice(0, MAX_PREVIEW_ROWS) : state.translatedData;
+
+    if (isTruncated) {
+        elements.resultSummary.innerHTML += `<div style="margin-top: 8px; color: #5c7cfa; font-size: 14px;">ℹ️ 数据量超大 (${state.translatedData.length}行)，为保障浏览器流畅，仅展示前 ${MAX_PREVIEW_ROWS} 行预览。请点击下载获取全部数据。</div>`;
+    }
+
     // 构建表格内容
-    const rows = state.translatedData.map((row) => {
+    const rows = renderData.map((row) => {
         const cells = [`<td class="source-column">${escapeHtml(row.source)}</td>`];
 
         state.selectedLanguages.forEach(code => {
@@ -1228,8 +1276,17 @@ function showSingleModeResult() {
     const headerCells = state.headers.map(h => `<th>${escapeHtml(h)}</th>`);
     elements.tableHead.innerHTML = `<tr>${headerCells.join('')}</tr>`;
 
+    // 为防止超大表格导致渲染崩溃，前端仅提供前一百条预览
+    const MAX_PREVIEW_ROWS = 100;
+    const isTruncated = state.translatedData.length > MAX_PREVIEW_ROWS;
+    const renderData = isTruncated ? state.translatedData.slice(0, MAX_PREVIEW_ROWS) : state.translatedData;
+
+    if (isTruncated) {
+        elements.resultSummary.innerHTML += `<div style="margin-top: 8px; color: #5c7cfa; font-size: 14px;">ℹ️ 数据量超大 (${state.translatedData.length}行)，为保障浏览器流畅，仅展示前 ${MAX_PREVIEW_ROWS} 行预览。请点击下载获取全部数据。</div>`;
+    }
+
     // 构建表格内容 - 直接显示翻译后的二维数组
-    const rows = state.translatedData.map((row) => {
+    const rows = renderData.map((row) => {
         const cells = row.map(cell => {
             let cellClass = '';
             let cellContent = cell?.text || '-';
